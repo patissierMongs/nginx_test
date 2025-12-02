@@ -49,7 +49,7 @@
 
 ```bash
 # Docker 네트워크 생성
-docker network create nginx-test-net --subnet=172.20.0.0/16
+docker network create nginx-test-net --subnet=172.30.0.0/16
 
 # 전체 스택 시작
 ./scripts/start-all.sh

@@ -23,7 +23,10 @@
       "Bash(curl:*)",
       "Bash(docker exec:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: Nginx test environment with 8 WAS servers\n\n- Nginx load balancer with multiple upstream strategies\n- WAS 1,2: Tomcat (legacy on-premise simulation)\n- WAS 3,4: Spring Boot (Kotlin/Java)\n- WAS 5,6: Node.js Express (JavaScript/TypeScript)\n- WAS 7: Flask + Gunicorn (Python)\n- WAS 8: Go + Fiber\n- Redis Cluster (6 nodes)\n- Kafka Cluster (3 nodes with KRaft)\n- Observability stack: Prometheus, Grafana, Jaeger, Loki\n- Kubernetes manifests for Docker and containerd runtimes\n- GitLab CI/CD pipeline\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git branch:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
