@@ -1,0 +1,41 @@
+# Kubernetes Namespace for Nginx Test Environment
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nginx-test
+  labels:
+    name: nginx-test
+    environment: development
+    project: nginx-lb-test
+---
+# Resource Quota
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: nginx-test-quota
+  namespace: nginx-test
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    pods: "100"
+    services: "20"
+    persistentvolumeclaims: "30"
+---
+# Limit Range
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: nginx-test-limits
+  namespace: nginx-test
+spec:
+  limits:
+    - default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      type: Container

@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(for i in 2 3 4 5 6)",
+      "Bash(do)",
+      "Bash(\"C:/Users/upica/claude_desktop/nginx_test/nginx_test/infrastructure/redis/config/redis-1.conf\" )",
+      "Bash(\"C:/Users/upica/claude_desktop/nginx_test/nginx_test/infrastructure/redis/config/redis-$i.conf\")",
+      "Bash(done)",
+      "Bash(docker network create:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker info:*)",
+      "Bash(start \"\" \"C:/Program Files/Docker/Docker/Docker Desktop.exe\")",
+      "Bash(start \"\" \"$LOCALAPPDATA/Docker/Docker Desktop.exe\")",
+      "Bash(powershell -Command \"Start-Process ''C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe''\")",
+      "Bash(docker search:*)",
+      "Bash(docker ps:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(netsh interface ipv4 show excludedportrange:*)",
+      "Bash(dir:*)",
+      "Bash(docker logs:*)",
+      "Bash(start msedge:*)",
+      "Bash(curl:*)",
+      "Bash(docker exec:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

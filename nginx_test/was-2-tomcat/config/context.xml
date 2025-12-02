@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Context configuration for WAS-1 Tomcat
+  Includes Redis session store and resource definitions
+-->
+<Context>
+
+    <!-- Disable session persistence on restart for cluster setup -->
+    <Manager pathname="" />
+
+    <!-- Redis Session Manager (alternative to cluster session replication) -->
+    <!--
+    <Manager className="ru.zinin.redis.session.RedisManager"
+             host="redis-cluster"
+             port="6379"
+             timeout="2000"
+             maxRedirects="5"
+             database="0" />
+    -->
+
+    <!-- JNDI Resources -->
+
+    <!-- Redis Connection Pool -->
+    <Resource name="redis/cluster"
+              auth="Container"
+              type="redis.clients.jedis.JedisCluster"
+              factory="com.nginx.test.factory.JedisClusterFactory"
+              host="redis-1:6379,redis-2:6379,redis-3:6379"
+              maxTotal="100"
+              maxIdle="30"
+              minIdle="10"
+              maxWaitMillis="3000"
+              testOnBorrow="true"
+              testWhileIdle="true" />
+
+    <!-- Kafka Producer -->
+    <Resource name="kafka/producer"
+              auth="Container"
+              type="org.apache.kafka.clients.producer.KafkaProducer"
+              factory="com.nginx.test.factory.KafkaProducerFactory"
+              bootstrapServers="kafka-1:9092,kafka-2:9092,kafka-3:9092"
+              keySerializer="org.apache.kafka.common.serialization.StringSerializer"
+              valueSerializer="org.apache.kafka.common.serialization.StringSerializer"
+              acks="all"
+              retries="3"
+              batchSize="16384"
+              lingerMs="1"
+              bufferMemory="33554432" />
+
+    <!-- OpenTelemetry Configuration -->
+    <Environment name="otel/serviceName"
+                 value="was-1-tomcat"
+                 type="java.lang.String" />
+    <Environment name="otel/exporterEndpoint"
+                 value="http://jaeger:14268/api/traces"
+                 type="java.lang.String" />
+    <Environment name="otel/samplingRatio"
+                 value="1.0"
+                 type="java.lang.String" />
+
+    <!-- Prevent memory leaks -->
+    <JarScanner>
+        <JarScanFilter defaultPluggabilityScan="false" />
+    </JarScanner>
+
+</Context>

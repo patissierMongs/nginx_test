@@ -1,0 +1,140 @@
+# Nginx Ingress Controller and Load Balancer Configuration
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-lb
+  namespace: nginx-test
+  labels:
+    app: nginx-lb
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-lb
+  template:
+    metadata:
+      labels:
+        app: nginx-lb
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/nginx_status"
+        prometheus.io/port: "80"
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: nginx-proxy-params
+              mountPath: /etc/nginx/proxy_params
+              subPath: proxy_params
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+        - name: nginx-proxy-params
+          configMap:
+            name: nginx-proxy-params
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-lb
+  namespace: nginx-test
+  labels:
+    app: nginx-lb
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: 443
+      protocol: TCP
+      name: https
+  selector:
+    app: nginx-lb
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-test-ingress
+  namespace: nginx-test
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: nginx-test.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-lb
+                port:
+                  number: 80
+          - path: /api/springboot
+            pathType: Prefix
+            backend:
+              service:
+                name: was-3-springboot
+                port:
+                  number: 8080
+          - path: /api/nodejs
+            pathType: Prefix
+            backend:
+              service:
+                name: was-5-nodejs
+                port:
+                  number: 3000
+          - path: /api/flask
+            pathType: Prefix
+            backend:
+              service:
+                name: was-7-flask
+                port:
+                  number: 5000
+          - path: /api/go
+            pathType: Prefix
+            backend:
+              service:
+                name: was-8-go
+                port:
+                  number: 8000

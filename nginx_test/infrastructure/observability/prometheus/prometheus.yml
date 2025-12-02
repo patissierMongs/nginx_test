@@ -1,0 +1,130 @@
+# Prometheus Configuration for Nginx Test Environment
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'nginx-test'
+    env: 'development'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Rule files
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # Nginx
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+        labels:
+          service: 'nginx-lb'
+    metrics_path: /nginx_status
+
+  # WAS 1,2 - Tomcat (Legacy)
+  - job_name: 'was-tomcat'
+    static_configs:
+      - targets: ['was-1-tomcat:8080', 'was-2-tomcat:8080']
+        labels:
+          type: 'legacy'
+          runtime: 'tomcat'
+    metrics_path: /metrics
+
+  # WAS 3,4 - Spring Boot
+  - job_name: 'was-springboot'
+    static_configs:
+      - targets: ['was-3-springboot:8080', 'was-4-springboot:8080']
+        labels:
+          type: 'kubernetes'
+          runtime: 'spring-boot'
+    metrics_path: /actuator/prometheus
+
+  # WAS 5,6 - Node.js
+  - job_name: 'was-nodejs'
+    static_configs:
+      - targets: ['was-5-nodejs:3000', 'was-6-nodejs:3000']
+        labels:
+          type: 'kubernetes'
+          runtime: 'nodejs'
+    metrics_path: /metrics
+
+  # WAS 7 - Flask
+  - job_name: 'was-flask'
+    static_configs:
+      - targets: ['was-7-flask:5000']
+        labels:
+          type: 'kubernetes'
+          runtime: 'flask'
+    metrics_path: /metrics
+
+  # WAS 8 - Go
+  - job_name: 'was-go'
+    static_configs:
+      - targets: ['was-8-go:8000']
+        labels:
+          type: 'kubernetes'
+          runtime: 'go'
+    metrics_path: /metrics
+
+  # Redis Cluster
+  - job_name: 'redis'
+    static_configs:
+      - targets:
+          - 'redis-1:6379'
+          - 'redis-2:6379'
+          - 'redis-3:6379'
+          - 'redis-4:6379'
+          - 'redis-5:6379'
+          - 'redis-6:6379'
+        labels:
+          service: 'redis-cluster'
+
+  # Kafka (JMX Exporter needed in production)
+  - job_name: 'kafka'
+    static_configs:
+      - targets:
+          - 'kafka-1:9999'
+          - 'kafka-2:9999'
+          - 'kafka-3:9999'
+        labels:
+          service: 'kafka-cluster'
+
+  # Jaeger
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+        labels:
+          service: 'jaeger'
+
+  # Loki
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+        labels:
+          service: 'loki'
+    metrics_path: /metrics
+
+  # OpenTelemetry Collector
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+        labels:
+          service: 'otel-collector'
+
+# Remote write to external systems (optional)
+# remote_write:
+#   - url: "http://cortex:9009/api/prom/push"

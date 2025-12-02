@@ -1,0 +1,45 @@
+# Common ConfigMaps for all WAS
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: was-common-config
+  namespace: nginx-test
+data:
+  # Redis configuration
+  REDIS_NODES: "redis-1:6379,redis-2:6379,redis-3:6379"
+  REDIS_CLUSTER_ENABLED: "true"
+
+  # Kafka configuration
+  KAFKA_BROKERS: "kafka-1:9092,kafka-2:9092,kafka-3:9092"
+
+  # Observability
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+  LOKI_URL: "http://loki:3100"
+  PROMETHEUS_ENDPOINT: "http://prometheus:9090"
+
+  # Environment
+  ENVIRONMENT: "development"
+  LOG_LEVEL: "info"
+---
+# Nginx ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: nginx-test
+data:
+  nginx.conf: |
+    # Include the main nginx.conf from nginx/config/nginx.conf
+    # This is a placeholder - mount the actual config from the repository
+---
+# Observability ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-config
+  namespace: nginx-test
+data:
+  OTEL_TRACES_EXPORTER: "otlp"
+  OTEL_METRICS_EXPORTER: "prometheus"
+  OTEL_LOGS_EXPORTER: "otlp"
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=nginx-test,deployment.environment=kubernetes"

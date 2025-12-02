@@ -1,0 +1,330 @@
+# GitLab CI/CD Pipeline for Nginx Test Environment
+# Multi-project pipeline with separate stages for each WAS
+
+stages:
+  - validate
+  - build
+  - test
+  - scan
+  - deploy-staging
+  - deploy-production
+
+variables:
+  DOCKER_REGISTRY: registry.gitlab.com/${CI_PROJECT_PATH}
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_DRIVER: overlay2
+
+# Cache configuration
+.cache-config: &cache-config
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .m2/repository
+      - .gradle/caches
+      - node_modules
+      - .cache/pip
+      - vendor
+
+# Docker build template
+.docker-build: &docker-build
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+# ============================================
+# VALIDATION STAGE
+# ============================================
+validate:lint:
+  stage: validate
+  image: alpine:3.19
+  script:
+    - echo "Validating configuration files..."
+    - apk add --no-cache yamllint
+    - yamllint -d relaxed infrastructure/
+    - yamllint -d relaxed k8s/
+  rules:
+    - changes:
+        - "**/*.yml"
+        - "**/*.yaml"
+
+validate:dockerfile:
+  stage: validate
+  image: hadolint/hadolint:latest-alpine
+  script:
+    - echo "Linting Dockerfiles..."
+    - find . -name "Dockerfile" -exec hadolint {} \;
+  rules:
+    - changes:
+        - "**/Dockerfile"
+
+# ============================================
+# BUILD STAGE - WAS 1,2 (Tomcat)
+# ============================================
+build:tomcat:
+  stage: build
+  image: maven:3.9-eclipse-temurin-11
+  <<: *cache-config
+  script:
+    - echo "Building Tomcat WAS..."
+    - cd was-1-tomcat && mvn clean package -DskipTests
+    - cd ../was-2-tomcat && mvn clean package -DskipTests
+  artifacts:
+    paths:
+      - was-1-tomcat/target/*.war
+      - was-2-tomcat/target/*.war
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - was-1-tomcat/**/*
+        - was-2-tomcat/**/*
+
+# ============================================
+# BUILD STAGE - WAS 3,4 (Spring Boot)
+# ============================================
+build:springboot:
+  stage: build
+  image: gradle:8.5-jdk21
+  <<: *cache-config
+  script:
+    - echo "Building Spring Boot WAS..."
+    - cd was-3-springboot && gradle build -x test
+    - cd ../was-4-springboot && gradle build -x test
+  artifacts:
+    paths:
+      - was-3-springboot/build/libs/*.jar
+      - was-4-springboot/build/libs/*.jar
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - was-3-springboot/**/*
+        - was-4-springboot/**/*
+
+# ============================================
+# BUILD STAGE - WAS 5,6 (Node.js)
+# ============================================
+build:nodejs:
+  stage: build
+  image: node:20-alpine
+  <<: *cache-config
+  script:
+    - echo "Building Node.js WAS..."
+    - cd was-5-nodejs && npm ci
+    - cd ../was-6-nodejs && npm ci && npm run build
+  artifacts:
+    paths:
+      - was-5-nodejs/node_modules
+      - was-6-nodejs/dist
+      - was-6-nodejs/node_modules
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - was-5-nodejs/**/*
+        - was-6-nodejs/**/*
+
+# ============================================
+# BUILD STAGE - WAS 7 (Flask)
+# ============================================
+build:flask:
+  stage: build
+  image: python:3.12-slim
+  <<: *cache-config
+  script:
+    - echo "Building Flask WAS..."
+    - cd was-7-flask
+    - pip install -r requirements.txt --target=./vendor
+  artifacts:
+    paths:
+      - was-7-flask/vendor
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - was-7-flask/**/*
+
+# ============================================
+# BUILD STAGE - WAS 8 (Go)
+# ============================================
+build:go:
+  stage: build
+  image: golang:1.22-alpine
+  script:
+    - echo "Building Go WAS..."
+    - cd was-8-go
+    - go mod download
+    - CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o was-8-go ./src/main.go
+  artifacts:
+    paths:
+      - was-8-go/was-8-go
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - was-8-go/**/*
+
+# ============================================
+# TEST STAGE
+# ============================================
+test:springboot:
+  stage: test
+  image: gradle:8.5-jdk21
+  needs:
+    - build:springboot
+  script:
+    - cd was-3-springboot && gradle test
+    - cd ../was-4-springboot && gradle test
+  artifacts:
+    reports:
+      junit:
+        - was-3-springboot/build/test-results/test/*.xml
+        - was-4-springboot/build/test-results/test/*.xml
+  rules:
+    - changes:
+        - was-3-springboot/**/*
+        - was-4-springboot/**/*
+
+test:nodejs:
+  stage: test
+  image: node:20-alpine
+  needs:
+    - build:nodejs
+  script:
+    - cd was-5-nodejs && npm test || echo "No tests"
+    - cd ../was-6-nodejs && npm test || echo "No tests"
+  rules:
+    - changes:
+        - was-5-nodejs/**/*
+        - was-6-nodejs/**/*
+
+test:go:
+  stage: test
+  image: golang:1.22-alpine
+  needs:
+    - build:go
+  script:
+    - cd was-8-go && go test ./... -v
+  rules:
+    - changes:
+        - was-8-go/**/*
+
+# ============================================
+# SECURITY SCAN STAGE
+# ============================================
+scan:trivy:
+  stage: scan
+  image: aquasec/trivy:latest
+  script:
+    - echo "Scanning Docker images for vulnerabilities..."
+    - trivy fs --exit-code 0 --severity HIGH,CRITICAL .
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+scan:secrets:
+  stage: scan
+  image: trufflesecurity/trufflehog:latest
+  script:
+    - echo "Scanning for secrets..."
+    - trufflehog filesystem . --fail
+  allow_failure: true
+
+# ============================================
+# DOCKER BUILD & PUSH
+# ============================================
+docker:springboot:
+  stage: deploy-staging
+  <<: *docker-build
+  needs:
+    - build:springboot
+    - test:springboot
+  script:
+    - docker build -t $DOCKER_REGISTRY/was-3-springboot:$CI_COMMIT_SHA -f was-3-springboot/docker/Dockerfile was-3-springboot
+    - docker build -t $DOCKER_REGISTRY/was-4-springboot:$CI_COMMIT_SHA -f was-4-springboot/docker/Dockerfile was-4-springboot
+    - docker push $DOCKER_REGISTRY/was-3-springboot:$CI_COMMIT_SHA
+    - docker push $DOCKER_REGISTRY/was-4-springboot:$CI_COMMIT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - was-3-springboot/**/*
+        - was-4-springboot/**/*
+
+docker:nodejs:
+  stage: deploy-staging
+  <<: *docker-build
+  needs:
+    - build:nodejs
+    - test:nodejs
+  script:
+    - docker build -t $DOCKER_REGISTRY/was-5-nodejs:$CI_COMMIT_SHA -f was-5-nodejs/docker/Dockerfile was-5-nodejs
+    - docker build -t $DOCKER_REGISTRY/was-6-nodejs:$CI_COMMIT_SHA -f was-6-nodejs/docker/Dockerfile was-6-nodejs
+    - docker push $DOCKER_REGISTRY/was-5-nodejs:$CI_COMMIT_SHA
+    - docker push $DOCKER_REGISTRY/was-6-nodejs:$CI_COMMIT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - was-5-nodejs/**/*
+        - was-6-nodejs/**/*
+
+docker:flask:
+  stage: deploy-staging
+  <<: *docker-build
+  needs:
+    - build:flask
+  script:
+    - docker build -t $DOCKER_REGISTRY/was-7-flask:$CI_COMMIT_SHA -f was-7-flask/docker/Dockerfile was-7-flask
+    - docker push $DOCKER_REGISTRY/was-7-flask:$CI_COMMIT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - was-7-flask/**/*
+
+docker:go:
+  stage: deploy-staging
+  <<: *docker-build
+  needs:
+    - build:go
+    - test:go
+  script:
+    - docker build -t $DOCKER_REGISTRY/was-8-go:$CI_COMMIT_SHA -f was-8-go/docker/Dockerfile was-8-go
+    - docker push $DOCKER_REGISTRY/was-8-go:$CI_COMMIT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - was-8-go/**/*
+
+# ============================================
+# KUBERNETES DEPLOYMENT
+# ============================================
+deploy:k8s-staging:
+  stage: deploy-staging
+  image: bitnami/kubectl:latest
+  script:
+    - echo "Deploying to Kubernetes staging..."
+    - kubectl config use-context staging
+    - kubectl set image deployment/was-3-springboot was-3-springboot=$DOCKER_REGISTRY/was-3-springboot:$CI_COMMIT_SHA -n nginx-test
+    - kubectl set image deployment/was-4-springboot was-4-springboot=$DOCKER_REGISTRY/was-4-springboot:$CI_COMMIT_SHA -n nginx-test
+    - kubectl set image deployment/was-5-nodejs was-5-nodejs=$DOCKER_REGISTRY/was-5-nodejs:$CI_COMMIT_SHA -n nginx-test
+    - kubectl set image deployment/was-6-nodejs was-6-nodejs=$DOCKER_REGISTRY/was-6-nodejs:$CI_COMMIT_SHA -n nginx-test
+    - kubectl set image deployment/was-7-flask was-7-flask=$DOCKER_REGISTRY/was-7-flask:$CI_COMMIT_SHA -n nginx-test
+    - kubectl set image deployment/was-8-go was-8-go=$DOCKER_REGISTRY/was-8-go:$CI_COMMIT_SHA -n nginx-test
+    - kubectl rollout status deployment -n nginx-test --timeout=300s
+  environment:
+    name: staging
+    url: https://staging.nginx-test.local
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  when: manual
+
+deploy:k8s-production:
+  stage: deploy-production
+  image: bitnami/kubectl:latest
+  script:
+    - echo "Deploying to Kubernetes production..."
+    - kubectl config use-context production
+    - kubectl apply -k k8s/production/
+    - kubectl rollout status deployment -n nginx-test-prod --timeout=300s
+  environment:
+    name: production
+    url: https://nginx-test.local
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  when: manual

@@ -1,0 +1,140 @@
+# OpenTelemetry Collector Configuration
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus metrics receiver
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['localhost:8888']
+
+  # Jaeger receiver for legacy support
+  jaeger:
+    protocols:
+      thrift_http:
+        endpoint: 0.0.0.0:14268
+      grpc:
+        endpoint: 0.0.0.0:14250
+
+  # Zipkin receiver
+  zipkin:
+    endpoint: 0.0.0.0:9411
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Add resource attributes
+  resource:
+    attributes:
+      - key: environment
+        value: development
+        action: upsert
+      - key: cluster
+        value: nginx-test
+        action: upsert
+
+  # Filter unwanted data
+  filter:
+    traces:
+      span:
+        - 'attributes["http.target"] == "/health"'
+        - 'attributes["http.target"] == "/metrics"'
+
+  # Tail sampling for production
+  # tail_sampling:
+  #   decision_wait: 10s
+  #   num_traces: 100
+  #   expected_new_traces_per_sec: 10
+  #   policies:
+  #     - name: error-policy
+  #       type: status_code
+  #       status_code: {status_codes: [ERROR]}
+  #     - name: slow-traces-policy
+  #       type: latency
+  #       latency: {threshold_ms: 1000}
+  #     - name: probability-policy
+  #       type: probabilistic
+  #       probabilistic: {sampling_percentage: 10}
+
+exporters:
+  # Debug exporter
+  logging:
+    loglevel: info
+
+  # Jaeger exporter for traces
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  # Prometheus exporter for metrics
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: otel
+
+  # Loki exporter for logs
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    labels:
+      attributes:
+        service.name: "service"
+        service.namespace: "namespace"
+      resource:
+        deployment.environment: "environment"
+
+  # OTLP exporter (for forwarding to other collectors)
+  # otlp:
+  #   endpoint: remote-collector:4317
+  #   tls:
+  #     insecure: true
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    traces:
+      receivers: [otlp, jaeger, zipkin]
+      processors: [memory_limiter, batch, resource]
+      exporters: [jaeger, logging]
+
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus, logging]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [loki, logging]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888

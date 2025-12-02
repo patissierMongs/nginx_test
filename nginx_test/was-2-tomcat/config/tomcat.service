@@ -1,0 +1,61 @@
+# Systemd service file for Tomcat WAS-2
+# Location: /etc/systemd/system/tomcat-was2.service
+
+[Unit]
+Description=Apache Tomcat WAS-2 (Legacy On-Premise)
+Documentation=https://tomcat.apache.org/
+After=network.target redis.service kafka.service
+Wants=redis.service kafka.service
+
+[Service]
+Type=forking
+
+User=tomcat
+Group=tomcat
+
+Environment="JAVA_HOME=/usr/lib/jvm/java-11-openjdk"
+Environment="CATALINA_HOME=/opt/tomcat"
+Environment="CATALINA_BASE=/opt/tomcat/was-1"
+Environment="CATALINA_PID=/opt/tomcat/was-1/temp/tomcat.pid"
+Environment="CATALINA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+
+# OpenTelemetry Java Agent
+Environment="JAVA_OPTS=-javaagent:/opt/opentelemetry/opentelemetry-javaagent.jar \
+    -Dotel.service.name=was-2-tomcat \
+    -Dotel.exporter.otlp.endpoint=http://jaeger:4317 \
+    -Dotel.traces.exporter=otlp \
+    -Dotel.metrics.exporter=prometheus \
+    -Dotel.logs.exporter=otlp \
+    -Dotel.resource.attributes=service.namespace=nginx-test,deployment.environment=development"
+
+# JMX for monitoring
+Environment="CATALINA_OPTS=${CATALINA_OPTS} \
+    -Dcom.sun.management.jmxremote \
+    -Dcom.sun.management.jmxremote.port=9010 \
+    -Dcom.sun.management.jmxremote.ssl=false \
+    -Dcom.sun.management.jmxremote.authenticate=false \
+    -Dcom.sun.management.jmxremote.local.only=false \
+    -Djava.rmi.server.hostname=localhost"
+
+ExecStart=/opt/tomcat/was-1/bin/startup.sh
+ExecStop=/opt/tomcat/was-1/bin/shutdown.sh
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+
+# Process limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/tomcat/was-1/logs
+ReadWritePaths=/opt/tomcat/was-1/temp
+ReadWritePaths=/opt/tomcat/was-1/work
+
+[Install]
+WantedBy=multi-user.target

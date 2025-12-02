@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee
+                             http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
+         version="4.0">
+
+    <display-name>WAS-1 Tomcat Legacy Application</display-name>
+    <description>Classic Tomcat deployment for nginx test environment</description>
+
+    <welcome-file-list>
+        <welcome-file>index.jsp</welcome-file>
+    </welcome-file-list>
+
+    <servlet>
+        <servlet-name>HealthCheckServlet</servlet-name>
+        <servlet-class>com.nginx.test.HealthCheckServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>HealthCheckServlet</servlet-name>
+        <url-pattern>/health</url-pattern>
+    </servlet-mapping>
+
+    <servlet>
+        <servlet-name>ApiServlet</servlet-name>
+        <servlet-class>com.nginx.test.ApiServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>ApiServlet</servlet-name>
+        <url-pattern>/api/*</url-pattern>
+    </servlet-mapping>
+
+    <servlet>
+        <servlet-name>MetricsServlet</servlet-name>
+        <servlet-class>com.nginx.test.MetricsServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>MetricsServlet</servlet-name>
+        <url-pattern>/metrics</url-pattern>
+    </servlet-mapping>
+
+    <context-param>
+        <param-name>REDIS_HOST</param-name>
+        <param-value>${REDIS_HOST:redis-cluster}</param-value>
+    </context-param>
+    <context-param>
+        <param-name>KAFKA_BROKERS</param-name>
+        <param-value>${KAFKA_BROKERS:kafka-1:9092,kafka-2:9092,kafka-3:9092}</param-value>
+    </context-param>
+    <context-param>
+        <param-name>JAEGER_ENDPOINT</param-name>
+        <param-value>${JAEGER_ENDPOINT:http://jaeger:14268/api/traces}</param-value>
+    </context-param>
+
+    <listener>
+        <listener-class>com.nginx.test.AppContextListener</listener-class>
+    </listener>
+
+    <filter>
+        <filter-name>TracingFilter</filter-name>
+        <filter-class>com.nginx.test.TracingFilter</filter-class>
+    </filter>
+    <filter-mapping>
+        <filter-name>TracingFilter</filter-name>
+        <url-pattern>/*</url-pattern>
+    </filter-mapping>
+
+</web-app>

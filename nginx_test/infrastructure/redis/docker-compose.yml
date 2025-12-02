@@ -1,0 +1,166 @@
+version: '3.8'
+
+# Redis Cluster Configuration (3 masters + 3 replicas)
+# For development/testing purposes
+
+services:
+  redis-1:
+    image: redis:7.2-alpine
+    container_name: redis-1
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "6379:6379"
+      - "16379:16379"
+    volumes:
+      - ./config/redis-1.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-1-data:/data
+    networks:
+      nginx-test-net:
+        ipv4_address: 172.30.10.1
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-2:
+    image: redis:7.2-alpine
+    container_name: redis-2
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "6380:6379"
+      - "16380:16379"
+    volumes:
+      - ./config/redis-2.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-2-data:/data
+    networks:
+      nginx-test-net:
+        ipv4_address: 172.30.10.2
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-3:
+    image: redis:7.2-alpine
+    container_name: redis-3
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "6381:6379"
+      - "16381:16379"
+    volumes:
+      - ./config/redis-3.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-3-data:/data
+    networks:
+      nginx-test-net:
+        ipv4_address: 172.30.10.3
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-4:
+    image: redis:7.2-alpine
+    container_name: redis-4
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "6382:6379"
+      - "16382:16379"
+    volumes:
+      - ./config/redis-4.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-4-data:/data
+    networks:
+      nginx-test-net:
+        ipv4_address: 172.30.10.4
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-5:
+    image: redis:7.2-alpine
+    container_name: redis-5
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "6383:6379"
+      - "16383:16379"
+    volumes:
+      - ./config/redis-5.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-5-data:/data
+    networks:
+      nginx-test-net:
+        ipv4_address: 172.30.10.5
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-6:
+    image: redis:7.2-alpine
+    container_name: redis-6
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "6384:6379"
+      - "16384:16379"
+    volumes:
+      - ./config/redis-6.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-6-data:/data
+    networks:
+      nginx-test-net:
+        ipv4_address: 172.30.10.6
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Cluster initializer
+  redis-cluster-init:
+    image: redis:7.2-alpine
+    container_name: redis-cluster-init
+    depends_on:
+      redis-1:
+        condition: service_healthy
+      redis-2:
+        condition: service_healthy
+      redis-3:
+        condition: service_healthy
+      redis-4:
+        condition: service_healthy
+      redis-5:
+        condition: service_healthy
+      redis-6:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Creating Redis Cluster...'
+        redis-cli --cluster create \
+          172.30.10.1:6379 \
+          172.30.10.2:6379 \
+          172.30.10.3:6379 \
+          172.30.10.4:6379 \
+          172.30.10.5:6379 \
+          172.30.10.6:6379 \
+          --cluster-replicas 1 \
+          --cluster-yes
+        echo 'Redis Cluster created successfully!'
+        redis-cli -h 172.30.10.1 cluster info
+      "
+    networks:
+      nginx-test-net:
+
+networks:
+  nginx-test-net:
+    external: true
+
+volumes:
+  redis-1-data:
+  redis-2-data:
+  redis-3-data:
+  redis-4-data:
+  redis-5-data:
+  redis-6-data:
